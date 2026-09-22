@@ -5,6 +5,7 @@ import {
   CursorSettings,
   GrokSettings,
   OpenCodeSettings,
+  SarvamSettings,
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
@@ -14,6 +15,7 @@ import {
   CursorIcon,
   GrokIcon,
   type Icon,
+  SarvamIcon,
   OpenAI,
   OpenCodeIcon,
 } from "../Icons";
@@ -81,6 +83,13 @@ const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
     label: "Antigravity",
     icon: AntigravityIcon,
     settingsSchema: AntigravitySettings,
+  },
+  {
+    value: ProviderDriverKind.make("sarvam"),
+    label: "Sarvam Code",
+    icon: SarvamIcon,
+    badgeLabel: "Early Access",
+    settingsSchema: SarvamSettings,
   },
 ];
 

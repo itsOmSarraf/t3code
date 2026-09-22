@@ -261,6 +261,12 @@ export const CursorIcon: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+export const SarvamIcon: Icon = ({ className, ...props }) => (
+  <svg {...props} viewBox="0 0 24 24" className={cn("fill-[#5B4DFF]", className)}>
+    <path d="M12 2.2 4.2 6.7v10.6L12 21.8l7.8-4.5V6.7L12 2.2Zm0 2.3 5.6 3.2v6.6L12 17.5 6.4 14.3V7.7L12 4.5Zm0 2.6-2.7 4.7h5.4L12 7.1Z" />
+  </svg>
+);
+
 export const GrokIcon: Icon = ({ className, ...props }) => (
   <svg
     {...props}
