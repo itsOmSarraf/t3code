@@ -1,6 +1,7 @@
 import {
   type ClaudeSettings,
   type ModelCapabilities,
+  type ServerProviderModel,
   type ServerProviderSlashCommand,
 } from "@t3tools/contracts";
 import * as DateTime from "effect/DateTime";
@@ -11,6 +12,7 @@ import * as Path from "effect/Path";
 import * as Ref from "effect/Ref";
 import * as Result from "effect/Result";
 import { ChildProcess, ChildProcessSpawner } from "effect/unstable/process";
+import { parseCliArgs } from "@t3tools/shared/cliArgs";
 import { createModelCapabilities } from "@t3tools/shared/model";
 import { resolveSpawnCommand } from "@t3tools/shared/shell";
 import {
@@ -57,6 +59,83 @@ const CLAUDE_PRESENTATION = {
   showInteractionModeToggle: true,
   reportsContextWindow: true,
 } as const;
+
+function claudeSettingsFileFromLaunchArgs(launchArgs: string): string | undefined {
+  const settingsPath = parseCliArgs(launchArgs).flags.settings?.trim();
+  return settingsPath ? settingsPath : undefined;
+}
+
+/**
+ * Claude Code's `--settings` file can replace the built-in model picker
+ * (`modelPicker.replaceBuiltInOptions`). That list is the picker the CLI
+ * shows; T3 Code otherwise publishes the bundled Claude catalog plus any
+ * instance custom models.
+ */
+function modelsReplacingClaudeCatalog(
+  settingsJson: unknown,
+): ReadonlyArray<ServerProviderModel> | null {
+  if (!settingsJson || typeof settingsJson !== "object") return null;
+  const record = settingsJson as { model?: unknown; modelPicker?: unknown };
+  const picker = record.modelPicker;
+  if (!picker || typeof picker !== "object") return null;
+  const { replaceBuiltInOptions, options } = picker as {
+    replaceBuiltInOptions?: unknown;
+    options?: unknown;
+  };
+  if (replaceBuiltInOptions !== true || !Array.isArray(options)) return null;
+
+  const preferred = typeof record.model === "string" ? record.model.trim() : "";
+  const models: ServerProviderModel[] = [];
+  const seen = new Set<string>();
+  for (const option of options) {
+    if (!option || typeof option !== "object") continue;
+    const row = option as { model?: unknown; label?: unknown };
+    const slug = typeof row.model === "string" ? row.model.trim() : "";
+    if (!slug || seen.has(slug)) continue;
+    seen.add(slug);
+    const label = typeof row.label === "string" ? row.label.trim() : "";
+    models.push({
+      slug,
+      name: label || slug,
+      isCustom: true,
+      ...(slug === preferred ? { isDefault: true } : {}),
+      capabilities: DEFAULT_CLAUDE_MODEL_CAPABILITIES,
+    });
+  }
+  return models.length > 0 ? models : null;
+}
+
+const readReplacingClaudeModelPicker = Effect.fn("readReplacingClaudeModelPicker")(function* (
+  claudeSettings: ClaudeSettings,
+) {
+  const settingsPath = claudeSettingsFileFromLaunchArgs(claudeSettings.launchArgs);
+  if (!settingsPath) return null;
+  const fileSystem = yield* FileSystem.FileSystem;
+  const path = yield* Path.Path;
+  const text = yield* fileSystem
+    .readFileString(path.resolve(settingsPath))
+    .pipe(Effect.orElseSucceed(() => null));
+  if (!text) return null;
+  try {
+    return modelsReplacingClaudeCatalog(JSON.parse(text));
+  } catch {
+    return null;
+  }
+});
+
+const resolveClaudeProviderModels = Effect.fn("resolveClaudeProviderModels")(function* (
+  claudeSettings: ClaudeSettings,
+  builtInModels: ReadonlyArray<ServerProviderModel>,
+) {
+  const replaced = yield* readReplacingClaudeModelPicker(claudeSettings);
+  if (replaced) return replaced;
+  return providerModelsFromSettings(
+    builtInModels,
+    claudeSettings.customModels,
+    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
+  );
+});
+
 function toTitleCaseWords(value: string): string {
   const parts: Array<string> = [];
   for (const part of value.split(/[\s_-]+/g)) {
@@ -433,10 +512,9 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
 > {
   const resolvedEnvironment = environment ?? process.env;
   const checkedAt = DateTime.formatIso(yield* DateTime.now);
-  const allModels = providerModelsFromSettings(
+  const allModels = yield* resolveClaudeProviderModels(
+    claudeSettings,
     modelCatalog.models.map((entry) => entry.model),
-    claudeSettings.customModels,
-    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
   );
 
   if (!claudeSettings.enabled) {
@@ -523,10 +601,9 @@ export const checkClaudeProviderStatus = Effect.fn("checkClaudeProviderStatus")(
     });
   }
 
-  const models = providerModelsFromSettings(
+  const models = yield* resolveClaudeProviderModels(
+    claudeSettings,
     resolveClaudeModelsForVersion(modelCatalog, parsedVersion),
-    claudeSettings.customModels,
-    DEFAULT_CLAUDE_MODEL_CAPABILITIES,
   );
   const versionUpgradeMessage = formatClaudeVersionUpgradeMessage(modelCatalog, parsedVersion);
 
@@ -595,13 +672,12 @@ const nowIso = Effect.map(DateTime.now, DateTime.formatIso);
 export const makePendingClaudeProvider = (
   claudeSettings: ClaudeSettings,
   modelCatalog: ClaudeModelCatalog = BUNDLED_CLAUDE_MODEL_CATALOG,
-): Effect.Effect<ServerProviderDraft> =>
+): Effect.Effect<ServerProviderDraft, never, FileSystem.FileSystem | Path.Path> =>
   Effect.gen(function* () {
     const checkedAt = yield* nowIso;
-    const models = providerModelsFromSettings(
+    const models = yield* resolveClaudeProviderModels(
+      claudeSettings,
       modelCatalog.models.map((entry) => entry.model),
-      claudeSettings.customModels,
-      DEFAULT_CLAUDE_MODEL_CAPABILITIES,
     );
 
     if (!claudeSettings.enabled) {

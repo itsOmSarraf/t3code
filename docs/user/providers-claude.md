@@ -106,3 +106,7 @@ config directory and put the router's endpoint and credential variables in that
 instance's **Environment variables**. The router must run where the environment
 can reach it. Follow the [Claude Code Router instructions](https://github.com/musistudio/claude-code-router)
 for its installation and routing configuration.
+
+If the instance's launch arguments pass `--settings` to a Claude Code settings
+file that replaces the built-in model picker, the chat picker lists those
+models.

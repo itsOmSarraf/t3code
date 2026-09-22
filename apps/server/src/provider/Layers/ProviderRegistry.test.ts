@@ -3,6 +3,7 @@ import { describe, it, assert } from "@effect/vitest";
 import * as DateTime from "effect/DateTime";
 import * as Deferred from "effect/Deferred";
 import * as Effect from "effect/Effect";
+import * as FileSystem from "effect/FileSystem";
 import * as Path from "effect/Path";
 import * as Exit from "effect/Exit";
 import * as Fiber from "effect/Fiber";
@@ -2941,6 +2942,49 @@ it.layer(Layer.mergeAll(NodeServices.layer, ServerSettingsModule.layerTest(), Te
                   stderr: "",
                   code: 0,
                 };
+              throw new Error(`Unexpected args: ${joined}`);
+            }),
+          ),
+        ),
+      );
+
+      it.effect("lists only the models from a --settings picker that replaces built-ins", () =>
+        Effect.gen(function* () {
+          const fs = yield* FileSystem.FileSystem;
+          const path = yield* Path.Path;
+          const directory = yield* fs.makeTempDirectoryScoped({ prefix: "t3-claude-settings-" });
+          const settingsPath = path.join(directory, "settings.json");
+          yield* fs.writeFileString(
+            settingsPath,
+            JSON.stringify({
+              model: "glm-5.3",
+              modelPicker: {
+                replaceBuiltInOptions: true,
+                options: [
+                  { model: "glm-5.3", label: "GLM 5.3" },
+                  { model: "dsv4.1-flash", label: "DeepSeek V4.1 Flash" },
+                ],
+              },
+            }),
+          );
+          const status = yield* checkClaudeProviderStatus(
+            Schema.decodeSync(ClaudeSettings)({
+              launchArgs: `--settings ${settingsPath}`,
+              customModels: ["should-not-appear"],
+            }),
+            claudeCapabilities(),
+          );
+          assert.deepStrictEqual(
+            status.models.map((model) => model.slug),
+            ["glm-5.3", "dsv4.1-flash"],
+          );
+          assert.strictEqual(status.models[0]?.name, "GLM 5.3");
+          assert.strictEqual(status.models[0]?.isDefault, true);
+        }).pipe(
+          Effect.provide(
+            mockSpawnerLayer((args) => {
+              const joined = args.join(" ");
+              if (joined === "--version") return { stdout: "2.1.0\n", stderr: "", code: 0 };
               throw new Error(`Unexpected args: ${joined}`);
             }),
           ),
