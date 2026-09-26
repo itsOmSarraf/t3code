@@ -267,6 +267,12 @@ export const SarvamIcon: Icon = ({ className, ...props }) => (
   </svg>
 );
 
+export const HermesIcon: Icon = ({ className, ...props }) => (
+  <svg {...props} viewBox="0 0 24 24" className={cn("fill-current", className)}>
+    <path d="M5 3h3.2v7.4h7.6V3H19v18h-3.2v-7.4H8.2V21H5V3Z" />
+  </svg>
+);
+
 export const GrokIcon: Icon = ({ className, ...props }) => (
   <svg
     {...props}

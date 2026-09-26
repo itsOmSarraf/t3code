@@ -6,6 +6,7 @@ import {
   GrokSettings,
   OpenCodeSettings,
   SarvamSettings,
+  HermesSettings,
   ProviderDriverKind,
 } from "@t3tools/contracts";
 import type * as Schema from "effect/Schema";
@@ -16,6 +17,7 @@ import {
   GrokIcon,
   type Icon,
   SarvamIcon,
+  HermesIcon,
   OpenAI,
   OpenCodeIcon,
 } from "../Icons";
@@ -90,6 +92,13 @@ const PROVIDER_CLIENT_DEFINITIONS: readonly ProviderClientDefinition[] = [
     icon: SarvamIcon,
     badgeLabel: "Early Access",
     settingsSchema: SarvamSettings,
+  },
+  {
+    value: ProviderDriverKind.make("hermes"),
+    label: "Hermes Agent",
+    icon: HermesIcon,
+    badgeLabel: "Early Access",
+    settingsSchema: HermesSettings,
   },
 ];
 

@@ -539,6 +539,41 @@ describe("AcpSessionRuntime", () => {
     );
   });
 
+  it.effect("picks the authenticate method from the agent's advertised auth methods", () => {
+    const startWith = (env: NodeJS.ProcessEnv | undefined) => {
+      const methods: Array<{ method: string; payload: unknown }> = [];
+      return Effect.gen(function* () {
+        const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
+        yield* runtime.start();
+        return methods;
+      }).pipe(
+        Effect.provide(
+          AcpSessionRuntime.layer({
+            ...mockRuntimeOptions,
+            spawn: { ...mockRuntimeOptions.spawn, ...(env ? { env } : {}) },
+            authMethodId: (initialize) => initialize.authMethods?.[0]?.id,
+            requestLogger: (event) =>
+              Effect.sync(() => {
+                if (event.status === "started") {
+                  methods.push({ method: event.method, payload: event.payload });
+                }
+              }),
+          }),
+        ),
+        Effect.scoped,
+      );
+    };
+    return Effect.gen(function* () {
+      const withoutAuth = yield* startWith(undefined);
+      expect(withoutAuth.map((entry) => entry.method)).not.toContain("authenticate");
+
+      const withAuth = yield* startWith({ ...process.env, T3_ACP_ANTIGRAVITY: "1" });
+      expect(withAuth.find((entry) => entry.method === "authenticate")?.payload).toEqual({
+        methodId: "oauth-personal",
+      });
+    }).pipe(Effect.provide(NodeServices.layer));
+  });
+
   it.effect("starts a session, prompts, and emits normalized events against the mock agent", () =>
     Effect.gen(function* () {
       const runtime = yield* AcpSessionRuntime.AcpSessionRuntime;
